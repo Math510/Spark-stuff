@@ -10,7 +10,7 @@ In any browser navigate to the download [page](http://spark.apache.org/downloads
 
 2. For package type select 'Pre-built for Hadoop 2.6 and later'
 
-3 For download type select 'Direct Download'
+3. For download type select 'Direct Download'
 
 4. Click the link to download
 
