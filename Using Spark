@@ -1,0 +1,439 @@
+---
+title: "Using Spark"
+author: "Kenny Darrell"
+date: "November 5, 2015"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Running Spark
+
+Java issues?
+
+Thus we could run Spark on its own. 
+
+In the location where we have spark
+
+
+On a Mac
+```
+./bin/spark-shell
+```
+
+On Windows (cross your fingers)
+Possible windows issues, may need to [this](http://nishutayaltech.blogspot.com/2015/04/how-to-run-apache-spark-on-windows7-in.html).
+```
+bin\spark-shell
+```
+
+We are now in the Scala repl. More on this later.
+
+
+
+
+## Review from last week
+
+Last week we got an intro to a few concepts that we should review.
+
+1. Limitations of systems like R and Python
+2. Distributed computing
+3. Hadoop/HDFS
+4. Spark
+5. SparkR
+6. API
+
+
+
+## Limitations of systems like R and Python
+
+R and Python are great for small and medium sized
+
+There are many other (attempted) defintions of these, but for our purpose this one works pretty well. (Thanks to Hadley Wickham)
+
+Small Data - Fits in memory on a laptop: < 10 GB
+Medium Data - Fits in memory on a server or disk on a laptop: 10 GB - 1 TB
+Big Data - Can't fit in memory on any one machine: > 1 TB
+
+R and Python are great for Small Data. They can be good for Medium data if you have a server or with some decent coding chops on a single laptop. They are both terrible at number Big Data, on there own that is.
+
+## Distributed computing
+
+Distributed computing was made much easier (not easy just easier easier) via research by Google that eventually reached open source by the name Hadoop/HDFS.
+
+Distributed computing is the method of using the RAM of many computers to attack a problem, so it is best equipped for volume problems as opposed to variety  problems (concurrent computing) and speed constraints (parallel computing).
+
+## Hadoop/HDFS
+
+Hadoop and HDFS perform extremely poorly on Small Data. It can be okay on Medium Data. They often take much longer than the Python and R methods for very similar problems on small/medium data. For non-distrubted systems and software engineer folks they can be difficult to actaully get up and running.
+
+## Spark
+
+Spark was an improvement over Hadoop in almost every sense. It can perform better on Small and Medium Data than Hadoop/HDFS. Not a clear winner when it comes to comparison of R and Python on these sizes though. It is also much easier to get up and running sense it supports various backends and can run in a local mode. 
+
+## SparkR
+
+This was made avalable first to Python users via pyspark and then to R users via SparkR.
+
+## API
+
+This avalability is via an API.
+
+API - Application Programming Interface
+
+An API is an interface that provides access to some functionality. You don't have to worry about the underlying implementation, you can use the interface as a set of building blocks to solve some problem or create something.
+
+
+
+## Back to Spark, actaully Scala
+
+Scala is programming language that compiles to Java Bytecode and can run on the jvm the same as Java. It is about 10 years old. Many have claimed that it will replace Java in terms of new development. It makes many things easier.
+
+Many people do not like it as they think it is hard to learn.
+
+Have no fear, this is not a uniformly distributed statement.
+
+If you have learned R you will have a pretty easy time picking up Scala.
+
+
+Java Fibonacci
+```
+public class Fibonacci {
+	public static int fib(int n) {
+                int prev1=0, prev2=1;
+                for(int i=0; i<n; i++) {
+                    int savePrev1 = prev1;
+                    prev1 = prev2;
+                    prev2 = savePrev1 + prev2;
+                }
+                return prev1;
+	}
+}
+```
+
+
+Scala Fibonacci
+```
+def fib( n : Int) : Int = n match {
+   case 0 | 1 => n
+   case _ => fib( n-1 ) + fib( n-2 )
+}
+```
+
+R Fibonacci
+```{r}
+fib <- function(x) {
+  if (x %in% c(1, 2)) x
+  else fib(x - 1) + fib(x - 2)
+}
+```
+
+
+
+
+The biggest thing to note is that in Scala you need to say either val or var before 
+you create a variable.
+```
+val textFile = sc.textFile("README.md")
+textFile.count()
+textFile.first()
+```
+
+Some things to note about Spark
+
+It is lazy, in the computing sense. This means that it does not compute anything until it actually needs the result for something. This is good and bad.
+
+This is known as lazy evaluation.
+
+Pros 
+
+1. Performance increases by avoiding needless calculations
+2. The ability to construct potentially infinite data structures
+
+Cons
+
+1. Profiling becomes hard, work may not be done when you expect it to be. 
+
+The opposite is known as eager evaluation.
+
+```
+val linesWithSpark = textFile.filter(line => line.contains("Spark"))
+textFile.filter(line => line.contains("Spark")).count()
+```
+
+These hightlight the two types of operations that can happen to and RDD
+
+1. Transformations - build a new RDD	
+2. Actions - compute and output results	
+
+
+
+The basic building block of spark is the RDD (Resilient Distributed Dataset)
+RDD's are an immutable, partitioned collection of elements that can be operated on in parallel.
+
+Spark is pretty well [documented](http://spark.apache.org/docs/latest/).
+
+[RDD paper](http://www.cs.berkeley.edu/~matei/papers/2012/nsdi_spark.pdf)
+
+
+## Doing math with spark
+
+```
+val count = sc.parallelize(1 to 10000000).map{i =>
+  val x = Math.random()
+  val y = Math.random()
+  if (x*x + y*y < 1) 1 else 0
+}
+count.collect
+```
+
+
+
+
+
+```
+./bin/spark-shell --packages com.databricks:spark-csv_2.10:1.2.0
+
+import org.apache.spark.sql.SQLContext
+
+val sqlContext = new SQLContext(sc)
+
+val df = sqlContext.read.format("com.databricks.spark.csv").option("header", "true").option("inferSchema", "true").load("1996.csv")
+
+val ori = df.groupBy("Origin").count().withColumnRenamed("count", "in")
+ori.show()
+
+val des = df.groupBy("Dest").count().withColumnRenamed("count", "out")
+des.show()
+
+
+ori.registerTempTable("ori")
+des.registerTempTable("des")
+
+
+val res = ori.join(des, ori("Origin") === des("Dest"))
+
+res.registerTempTable("res")
+
+sqlContext.sql("SELECT Origin, in - out FROM res").show
+```
+
+
+
+
+
+## Using the APIs
+
+
+
+Show pyspark here
+
+
+```
+log = sc.textFile("README.md").cache()
+spark = log.filter(lambda line: "Spark" in line)
+
+
+```
+
+SparkR
+```
+./bin/sparkR
+```
+
+
+
+
+## Inside of rstudio
+
+
+```{r, eval = F}
+# This is the location where spark exists
+Sys.setenv(SPARK_HOME = '/Users/kdarrell/Desktop/Spark-1.5.1')
+
+# Proof that the above code actually worked.
+Sys.getenv("SPARK_HOME")
+
+# Location of the valid SparkR package.
+.libPaths(c(file.path(Sys.getenv("SPARK_HOME"), "R", "lib"), .libPaths()))
+
+# Make sure you don't have SparkR from cran!
+library(SparkR)
+
+
+# Starting Spark
+sc <- sparkR.init("local")
+sparkR.stop()
+# You can start it with a reference to packages.
+Sys.setenv('SPARKR_SUBMIT_ARGS'='"--packages" "com.databricks:spark-csv_2.10:1.2.0" "sparkr-shell"')
+sc <- sparkR.init("local")
+sparkR.stop()
+# You can start it give it more memory.
+sc <- sparkR.init("local", sparkEnvir=list(spark.executor.memory="10g"))
+
+
+# Create a file.
+cat(state.name, file = 'states.txt', sep = '\n')
+
+# Reead the file.
+lines <- SparkR:::textFile(sc, 'states.txt')
+length(lines)
+
+#sparkR.stop()
+```
+
+
+using sql context for data frames
+
+```{r eval = F}
+sqlContext <- sparkRSQL.init(sc)
+
+df <- createDataFrame(sqlContext, faithful) 
+```
+
+Is it really the same?
+
+```{r eval = F}
+# This works
+head(faithful)
+head(df)
+
+# And this
+faithful$eruptions
+df$eruptions
+
+# But not this
+faithful[1, ]
+df[1, ]
+
+
+lm(faithful$eruptions ~ faithful$waiting)
+lm(df$eruptions ~ df$waiting)
+```
+
+
+So if we want to do machine learning stuff what do we do
+
+
+```{r, eval = F}
+# https://spark.apache.org/docs/latest/sparkr.html#creating-dataframes
+# Create the DataFrame
+df <- createDataFrame(sqlContext, iris)
+
+SparkR::glm
+stats::glm
+
+# Fit a linear model over the dataset.
+model <- glm(Sepal_Length ~ Sepal_Width + Species, data = df, family = "gaussian")
+
+summary(model)
+
+predictions <- predict(model, newData = df)
+head(select(predictions, "Sepal_Length", "prediction"))
+```
+
+
+
+
+Running SQL
+```{r}
+faith <- createDataFrame(sqlContext, faithful)
+
+# Register this DataFrame as a table.
+registerTempTable(faith, "faith")
+
+# SQL statements can be run by using the sql method
+long <- sql(sqlContext, "SELECT * FROM faith WHERE waiting > 50")
+head(long)
+```
+
+
+
+
+```{r}
+
+
+printSchema(df)
+cache(df)
+head(df)
+columns(df)
+count(df)
+
+
+```
+
+
+should end this way
+
+```{r}
+sparkR.stop()
+```
+
+
+Using the Spark Graphx API from Scala with the flight data.
+
+```
+
+./bin/spark-shell --packages com.databricks:spark-csv_2.10:1.2.0
+
+import org.apache.spark.sql.SQLContext
+import org.apache.spark.graphx._
+import org.apache.spark.rdd.RDD
+import scala.util.MurmurHash
+
+val sqlContext = new SQLContext(sc)
+
+val df = sqlContext.read.format("com.databricks.spark.csv").option("header", "true").option("inferSchema", "true").load("1996.csv")
+
+
+val flightsFromTo = df.select($"Origin",$"Dest")
+val airportCodes = df.select($"Origin", $"Dest").flatMap(x => Iterable(x(0).toString, x(1).toString))
+
+val airportVertices: RDD[(VertexId, String)] = airportCodes.distinct().map(x => (MurmurHash.stringHash(x), x))
+val defaultAirport = ("Missing")
+
+val flightEdges = flightsFromTo.map(x =>
+    ((MurmurHash.stringHash(x(0).toString),MurmurHash.stringHash(x(1).toString)), 1)).reduceByKey(_+_).map(x => Edge(x._1._1, x._1._2,x._2))
+    
+val graph = Graph(airportVertices, flightEdges, defaultAirport)
+graph.persist() // we're going to be using it a lot
+
+
+graph.numVertices // 213
+graph.numEdges // 3189
+
+
+
+graph.triplets.sortBy(_.attr, ascending=false).map(triplet =>
+    "There were " + triplet.attr.toString + " flights from " + triplet.srcAttr + " to " + triplet.dstAttr + ".").take(10)
+
+graph.triplets.sortBy(_.attr).map(triplet =>
+    "There were " + triplet.attr.toString + " flights from " + triplet.srcAttr + " to " + triplet.dstAttr + ".").take(10)
+    
+    
+    
+    
+graph.inDegrees.join(airportVertices).sortBy(_._2._1, ascending=false).take(1)
+
+graph.outDegrees.join(airportVertices).sortBy(_._2._1, ascending=false).take(1)
+
+
+
+val ranks = graph.pageRank(0.0001).vertices
+
+
+val ranksAndAirports = ranks.join(airportVertices).sortBy(_._2._1, ascending=false).map(_._2._2)
+ranksAndAirports.take(10)
+
+```
+
+
+
+
+```{r}
+fl <- read.csv('../flight/1996.csv')
+library(igraph)
+
+```
